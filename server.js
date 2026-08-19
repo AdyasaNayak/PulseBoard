@@ -207,15 +207,33 @@ if (!ok) {
 req.session.userId = user.id;
 req.session.email = user.email;
 
-res.json({
-  message: 'Logged in',
-  user: { id: user.id, email: user.email },
+req.session.save((err) => {
+  if (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Failed to create session' });
+  }
+
+  res.json({
+    message: 'Logged in',
+    user: { id: user.id, email: user.email },
+  });
 });
   }
   catch(err){
     console.error(err);
     res.status(500).json({error:'Login failed'});
   }
+});
+
+app.get('/auth/me', (req, res) => {
+  if(!req.session.userId){
+    return res.status(401).json({error:'Not logged in'});
+  }
+
+  res.json({
+    id: req.session.userId,
+    email: req.session.email,
+  });
 });
 
 app.listen(PORT, async () => {

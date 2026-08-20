@@ -21,6 +21,13 @@ app.use(
 
 const PORT = 3000;
 
+function requireAuth(req, res, next) {
+  if (!req.session.userId) {
+    return res.status(401).json({ error: 'Not logged in' });
+  }
+  next();
+}
+
 app.get('/', (req, res) => {
   res.send('PulseBoard API is starting to exist');
 });
@@ -233,6 +240,17 @@ app.get('/auth/me', (req, res) => {
   res.json({
     id: req.session.userId,
     email: req.session.email,
+  });
+});
+
+app.post('/auth/logout', (req, res) => {
+  req.session.destroy((err) => { //wipe server-side session data
+    if(err){
+      console.error(err);
+      return res.status(500).json({error: 'Logout failed'});
+    }
+    res.clearCookie('connect.sid'); //default express-session cookie name 
+    res.json({message: 'Logged out'});
   });
 });
 

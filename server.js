@@ -36,9 +36,9 @@ app.get('/health', (req, res) => {
   res.json({ ok: true });
 });
 
-app.get('/services', async(req, res) => {
+app.get('/services', requireAuth, async(req, res) => {
   try{
-    const workspaceId = process.env.DEV_WORKSPACE_ID;
+    const workspaceId = req.session.workspaceId;
     const result = await pool.query(`SELECT id, workspace_id, name, url, interval_seconds, timeout_ms, expected_status, is_paused, current_status, created_at FROM services WHERE workspace_id = $1 ORDER BY created_at DESC`, [workspaceId]);
     res.json(result.rows);
   }
@@ -48,12 +48,12 @@ app.get('/services', async(req, res) => {
   }
 });
 
-app.get('/services/:id', async (req, res) => {
+app.get('/services/:id', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT * FROM services
        WHERE id = $1 AND workspace_id = $2`,
-      [req.params.id, process.env.DEV_WORKSPACE_ID]
+      [req.params.id, req.session.workspaceId]
     );
 
     if (result.rows.length === 0) {
@@ -67,14 +67,14 @@ app.get('/services/:id', async (req, res) => {
   }
 });
 
-app.post('/services', async(req, res) => {
+app.post('/services', requireAuth, async(req, res) => {
   try{
     const{name, url, intervalSeconds, timeoutMs, expectedStatus} = req.body;
 
     if(!name || !url){
       return res.status(400).json({error:'name and url are required'});
     }
-    const workspaceId = process.env.DEV_WORKSPACE_ID;
+    const workspaceId = req.session.workspaceId;
 
     const result = await pool.query(
       `INSERT INTO services(
@@ -82,7 +82,7 @@ app.post('/services', async(req, res) => {
       [
         workspaceId, name, url, intervalSeconds ?? 30, timeoutMs ?? 5000, expectedStatus ?? 200,
       ]
-    );
+    );  
     res.status(201).json(result.rows[0]);
   }
   catch(err){
@@ -91,7 +91,7 @@ app.post('/services', async(req, res) => {
   }
 });
 
-app.patch('/services/:id', async (req, res) => {
+app.patch('/services/:id', requireAuth, async (req, res) => {
   try {
     const { name, url, intervalSeconds, timeoutMs, expectedStatus, isPaused } =
       req.body;
@@ -114,7 +114,7 @@ app.patch('/services/:id', async (req, res) => {
         expectedStatus ?? null,
         isPaused ?? null,
         req.params.id,
-        process.env.DEV_WORKSPACE_ID,
+        req.session.workspaceId,
       ]
     );
 
@@ -129,13 +129,13 @@ app.patch('/services/:id', async (req, res) => {
   }
 });
 
-app.delete('/services/:id', async (req, res) => {
+app.delete('/services/:id', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
       `DELETE FROM services
        WHERE id = $1 AND workspace_id = $2
        RETURNING *`,
-      [req.params.id, process.env.DEV_WORKSPACE_ID]
+      [req.params.id, req.session.workspaceId]
     );
 
     if (result.rows.length === 0) {
@@ -213,6 +213,17 @@ if (!ok) {
 
 req.session.userId = user.id;
 req.session.email = user.email;
+
+const ws = await pool.query(
+  `SELECT id FROM workspaces WHERE owner_id = $1 ORDER BY created_at ASC LIMIT 1`,
+  [user.id]
+);
+
+if (ws.rows.length === 0) {
+  return res.status(500).json({ error: 'No workspace found for user' });
+}
+
+req.session.workspaceId = ws.rows[0].id;
 
 req.session.save((err) => {
   if (err) {

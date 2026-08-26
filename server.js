@@ -48,6 +48,34 @@ app.get('/services', requireAuth, async(req, res) => {
   }
 });
 
+app.get('/services/:id/health-checks', requireAuth, async(req, res) => {
+  try{
+    //next: verify service belongs to workspace, then SELECT health_checks
+    // res.status(501).json({message: 'health-checks not implemented yet'}); replace with
+    const serviceId = req.params.id;
+    const workspaceId = req.session.workspaceId;
+
+    const owned = await pool.query(
+      `SELECT id FROM services WHERE id = $1 AND workspace_id = $2`, [serviceId, workspaceId]
+    );
+
+    if(owned.rows.length === 0){
+      return res.status(404).json({error: 'Service not found'});
+    }
+
+    const checks = await pool.query(
+      `SELECT id, success, status_code, latency_ms, error_message, checked_at FROM health_checks WHERE service_id = $1 ORDER BY checked_at DESC LIMIT 20`, [serviceId]
+    ); //recent history for the detail view
+
+    res.json(checks.rows);
+  }
+  catch(err){
+    console.error(err);
+    res.status(500).json({error: 'Failed to fetch health checks'});
+  }
+});
+
+
 app.get('/services/:id', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(

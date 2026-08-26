@@ -17,23 +17,25 @@ async function checkService(service){
 
         clearTimeout(timer);
         
-        const latencyMs = Date.now() - started;
+        const latencyMs = Date.now() - started; ////how long the check took(in ms)
         const success = response.status === service.expected_status; //response.status === expected_status- Usually expect 200
 
-        return{
-            success,
-            statusCode: response.status,
-            latencyMs,
-            errorMessage: success ? null : `Expected ${service.expected_status}, got ${response.status}`,
-        };
-    }
-    catch(err){
-        const latencyMs = Date.now() - started;
-        const message = err.name === 'AbortError' ? 'Timeout' : err.message;
+        //status 200,expected 200-success=true
+        //status 500,expected 200-success=false
 
         return{
+            success, //did it match expected status?
+            statusCode: response.status, //HTTP code (200, 404)
+            latencyMs, //duration
+            errorMessage: success ? null : `Expected ${service.expected_status}, got ${response.status}`, //null if OK;short reason if not
+        };
+    }
+    catch(err){ //fetch threw: timeout abort, DNS fail, connection reset, etc
+        const latencyMs = Date.now() - started; //still measuring how long until failure
+        const message = err.name === 'AbortError' ? 'Timeout' : err.message; //If condition is (Abort from our timer)-message='Timeout'), if anything else,Message=err.message(e.g 'fetch failed)
+        return{
             success: false,
-            statusCode: null,
+            statusCode: null, //since never got an HTTP response
             latencyMs,
             errorMessage: message,
         };

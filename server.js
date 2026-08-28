@@ -1,3 +1,4 @@
+import cors from 'cors';
 import session from 'express-session';
 import bcrypt from 'bcrypt';
 
@@ -14,8 +15,16 @@ app.use(
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
+      sameSite: 'lax', //cookie policy that still works for localhost API calls
       maxAge: 1000 * 60 * 60 * 24 * 7,
     },
+  })
+);
+
+app.use(
+  cors({
+    origin: 'http://localhost:5173', //only the vite app may call the API from a browser
+    credentials: true, //allows cookies on cross origin requests
   })
 );
 
@@ -75,7 +84,7 @@ app.get('/services/:id/health-checks', requireAuth, async(req, res) => {
   }
 });
 
-
+//incidents for one service if you own it
 app.get('/services/:id/incidents', requireAuth, async (req, res) => {
   try {
     const serviceId = req.params.id;
@@ -84,7 +93,7 @@ app.get('/services/:id/incidents', requireAuth, async (req, res) => {
     const owned = await pool.query(
       `SELECT id FROM services WHERE id = $1 AND workspace_id = $2`,
       [serviceId, workspaceId]
-    );
+    );  
 
     if (owned.rows.length === 0) {
       return res.status(404).json({ error: 'Service not found' });
@@ -106,9 +115,14 @@ app.get('/services/:id/incidents', requireAuth, async (req, res) => {
   }
 });
 
+//All incidents in your workspace (join with service name)
+
+//this route answers-Show me recent incident for my workspace
+
 app.get('/incidents', requireAuth, async (req, res) => {
+  //If there's no logged-in session, requireAuth never runs.You only get incidents after login(cookie->session)
   try {
-    const workspaceId = req.session.workspaceId;
+    const workspaceId = req.session.workspaceId; //req.session.workspaceId is set at login.Incidents don't store workspace_id themselves.They store service_id.So we use the session's workspace to scope the query:"only services in my workspace."
 
     const incidents = await pool.query(
       `SELECT i.id, i.service_id, s.name AS service_name,
@@ -120,7 +134,7 @@ app.get('/incidents', requireAuth, async (req, res) => {
        LIMIT 50`,
       [workspaceId]
     );
-
+    //i = short alias, JOIN services...=attach the service row for each incident, WHERE s.workspace_id...=security+multi-tenant:never return another user's incidents, ORDER BY ...DESC=newest first, LIMIT 50=cap payload
     res.json(incidents.rows);
   } catch (err) {
     console.error(err);

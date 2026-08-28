@@ -9,6 +9,7 @@ function App() {
   const [me, setMe] = useState(null)
   const [error, setError] = useState('')
   const [services, setServices] = useState([])
+  const [incidents, setIncidents] = useState([])
 
 
   async function handleLogin(e){
@@ -48,11 +49,37 @@ if (!svcRes.ok) {
   return
 }
 setServices(svcData)
+
+const incRes = await fetch(`${API}/incidents`, {
+  credentials: 'include',
+})
+const incData = await incRes.json()
+if(!incRes.ok){
+  setError(incData.error || 'Could not load incidents')
+  return
+}
+setIncidents(incData)
   }
+
+  async function handleLogout() {
+  await fetch(`${API}/auth/logout`, {
+    method: 'POST',
+    credentials: 'include',
+  })
+  setMe(null)
+  setServices([])
+  setIncidents([])
+}
+
   return (
     <main style={{ maxWidth: 420, margin: '2rem auto', fontFamily: 'system-ui' }}>
       <h1>PulseBoard</h1>
       <p>Login against the API (Day 8)</p>
+      {me && (
+  <button type="button" onClick={handleLogout}>
+    Log out
+  </button>
+)}
       <form onSubmit={handleLogin}>
         <label>
           Email
@@ -89,6 +116,18 @@ setServices(svcData)
       ))}
     </ul>
   )}
+  {incidents.length > 0 && (
+  <>
+    <h2>Incidents</h2>
+    <ul>
+      {incidents.map((i) => (
+        <li key={i.id}>
+          {i.service_name} — {i.status} — {i.summary}
+        </li>
+      ))}
+    </ul>
+  </>
+)}
     </main>
   )
 }

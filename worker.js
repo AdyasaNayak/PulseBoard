@@ -65,6 +65,42 @@ async function runChecks(){
         const newStatus = check.success ? 'operational' : 'down';
         await pool.query(`UPDATE services SET current_status = $1 WHERE id = $2`,
             [newStatus, service.id]);
+
+        // Day 7: one open incident per continuous outage (create / skip / resolve)
+        await syncIncident(service, check.success);
+    }
+}
+
+async function syncIncident(service, checkSucceeded) {
+    const open = await pool.query(
+        `SELECT id FROM incidents
+         WHERE service_id = $1 AND resolved_at IS NULL
+         LIMIT 1`,
+        [service.id]
+    );
+
+    const hasOpenIncident = open.rows.length > 0;
+
+    if (!checkSucceeded) {
+        if (!hasOpenIncident) {
+            await pool.query(
+                `INSERT INTO incidents (service_id, severity, status, summary)
+                 VALUES ($1, 'critical', 'open', $2)`,
+                [service.id, `${service.name} is unavailable`]
+            );
+            console.log(`  → incident OPENED for ${service.name}`);
+        }
+        return;
+    }
+
+    if (hasOpenIncident) {
+        await pool.query(
+            `UPDATE incidents
+             SET resolved_at = now(), status = 'resolved'
+             WHERE service_id = $1 AND resolved_at IS NULL`,
+            [service.id]
+        );
+        console.log(`  → incident RESOLVED for ${service.name}`);
     }
 }
 

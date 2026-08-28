@@ -76,6 +76,59 @@ app.get('/services/:id/health-checks', requireAuth, async(req, res) => {
 });
 
 
+app.get('/services/:id/incidents', requireAuth, async (req, res) => {
+  try {
+    const serviceId = req.params.id;
+    const workspaceId = req.session.workspaceId;
+
+    const owned = await pool.query(
+      `SELECT id FROM services WHERE id = $1 AND workspace_id = $2`,
+      [serviceId, workspaceId]
+    );
+
+    if (owned.rows.length === 0) {
+      return res.status(404).json({ error: 'Service not found' });
+    }
+
+    const incidents = await pool.query(
+      `SELECT id, service_id, severity, status, summary, started_at, resolved_at
+       FROM incidents
+       WHERE service_id = $1
+       ORDER BY started_at DESC
+       LIMIT 50`,
+      [serviceId]
+    );
+
+    res.json(incidents.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch incidents' });
+  }
+});
+
+app.get('/incidents', requireAuth, async (req, res) => {
+  try {
+    const workspaceId = req.session.workspaceId;
+
+    const incidents = await pool.query(
+      `SELECT i.id, i.service_id, s.name AS service_name,
+              i.severity, i.status, i.summary, i.started_at, i.resolved_at
+       FROM incidents i
+       JOIN services s ON s.id = i.service_id
+       WHERE s.workspace_id = $1
+       ORDER BY i.started_at DESC
+       LIMIT 50`,
+      [workspaceId]
+    );
+
+    res.json(incidents.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch incidents' });
+  }
+});
+
+
 app.get('/services/:id', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(

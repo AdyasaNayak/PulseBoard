@@ -10,6 +10,40 @@ function App() {
   const [error, setError] = useState('')
   const [services, setServices] = useState([])
   const [incidents, setIncidents] = useState([])
+  const [newName, setNewName] = useState('')
+  const [newUrl, setNewUrl] = useState('')
+
+
+  async function loadServices(){
+    const res = await fetch(`${API}/services`, {credentials: 'include'})
+    const data = await res.json()
+    if(!res.ok){
+      setError(data.error || 'Could not load services')
+      return
+    }
+    setServices(data)
+  }
+
+  async function handleAddService(e) {
+  e.preventDefault()
+  setError('')
+
+  const res = await fetch(`${API}/services`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ name: newName, url: newUrl }),
+  })
+  const data = await res.json()
+  if (!res.ok) {
+    setError(data.error || 'Could not add service')
+    return
+  }
+
+  setNewName('')
+  setNewUrl('')
+  await loadServices()
+}
 
 
   async function handleLogin(e){
@@ -103,19 +137,39 @@ setIncidents(incData)
       </form>
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
       {me && (
-        <pre style={{ background: '#f4f4f4', padding: 12 }}>
-          {JSON.stringify(me, null, 2)}
-        </pre>
-      )}
-      {services.length > 0 && (
-    <ul>
-      {services.map((s) => (
-        <li key={s.id}>
-          {s.name} — {s.current_status} — {s.url}
-        </li>
-      ))}
-    </ul>
-  )}
+  <pre style={{ background: '#f4f4f4', padding: 12 }}>
+    {JSON.stringify(me, null, 2)}
+  </pre>
+)}
+
+{me && (
+  <form onSubmit={handleAddService}>
+    <h2>Add service</h2>
+    <input
+      placeholder="Name"
+      value={newName}
+      onChange={(e) => setNewName(e.target.value)}
+      style={{ display: 'block', width: '100%', marginBottom: 8 }}
+    />
+    <input
+      placeholder="https://..."
+      value={newUrl}
+      onChange={(e) => setNewUrl(e.target.value)}
+      style={{ display: 'block', width: '100%', marginBottom: 8 }}
+    />
+    <button type="submit">Add</button>
+  </form>
+)}
+
+{services.length > 0 && (
+  <ul>
+    {services.map((s) => (
+      <li key={s.id}>
+        {s.name} — {s.current_status} — {s.url}
+      </li>
+    ))}
+  </ul>
+)}
   {incidents.length > 0 && (
   <>
     <h2>Incidents</h2>

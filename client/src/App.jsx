@@ -3,7 +3,9 @@ import './App.css'
 
 const API = 'http://localhost:3000'
 
-function App() {
+function App() { //function that returns HTML like JSX, Vite mounts it on the page, when state changes, React calls App again and updates the DOM
+
+  //pattern: [currentValue, setterFunction] = useState(startingValue)
   const [email, setEmail] = useState('jack3@test.com')
   const [password, setPassword] = useState('secret123')
   const [me, setMe] = useState(null)
@@ -45,6 +47,34 @@ function App() {
   await loadServices()
 }
 
+  async function handlePause(service) {
+    setError('')
+    const res = await fetch(`${API}/services/${service.id}`, {
+      method: 'PATCH',
+      headers:{'Content-Type': 'application/json'},
+      credentials: 'include',
+      body: JSON.stringify({isPaused: !service.is_paused}),
+    })
+     const data = await res.json()
+  if (!res.ok) {
+    setError(data.error || 'Could not update service')
+    return
+  }
+  await loadServices()
+}
+async function handleDelete(serviceId) {
+  setError('')
+  const res = await fetch(`${API}/services/${serviceId}`, {
+    method: 'DELETE',
+    credentials: 'include',
+  })
+  const data = await res.json()
+  if (!res.ok) {
+    setError(data.error || 'Could not delete service')
+    return
+  }
+  await loadServices()
+}
 
   async function handleLogin(e){
     e.preventDefault()
@@ -165,7 +195,14 @@ setIncidents(incData)
   <ul>
     {services.map((s) => (
       <li key={s.id}>
-        {s.name} — {s.current_status} — {s.url}
+        {s.name} — {s.current_status}
+        {s.is_paused ? ' (paused)' : ''} — {s.url}{' '}
+        <button type="button" onClick={() => handlePause(s)}>
+          {s.is_paused ? 'Resume' : 'Pause'}
+        </button>{' '}
+        <button type="button" onClick={() => handleDelete(s.id)}>
+          Delete
+        </button>
       </li>
     ))}
   </ul>

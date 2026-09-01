@@ -160,6 +160,8 @@ setIncidents(incData)
   setMe(null)
   setServices([])
   setIncidents([])
+  setSelectedId(null)
+  setChecks([])
 }
 
 useEffect(() => {
@@ -179,12 +181,13 @@ useEffect(() => {
   return (
     <main style={{ maxWidth: 420, margin: '2rem auto', fontFamily: 'system-ui' }}>
       <h1>PulseBoard</h1>
-      <p>Login against the API (Day 8)</p>
+      <p>{me ? 'Workspace dashboard' : 'Sign in to your workspace'}</p>
       {me && (
   <button type="button" onClick={handleLogout}>
     Log out
   </button>
 )}
+    {!me && (
       <form onSubmit={handleLogin}>
         <label>
           Email
@@ -206,6 +209,7 @@ useEffect(() => {
         </label>
         <button type="submit">Log in</button>
       </form>
+    )}
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
       {me && (
   <pre style={{ background: '#f4f4f4', padding: 12 }}>
@@ -232,6 +236,7 @@ useEffect(() => {
   </form>
 )}
 
+{me && <h2>Services</h2>}
 {services.length > 0 && (
   <ul>
     {services.map((s) => (

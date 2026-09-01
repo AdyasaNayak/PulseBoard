@@ -218,117 +218,177 @@ useEffect(() => {
   return () => clearInterval(id)
 }, [me, selectedId])
 
-  return (
-    <main style={{ maxWidth: 420, margin: '2rem auto', fontFamily: 'system-ui' }}>
-      <h1>PulseBoard</h1>
-      <p>{me ? 'Workspace dashboard' : 'Sign in to your workspace'}</p>
-      {me && (
-  <button type="button" onClick={handleLogout}>
-    Log out
-  </button>
-)}
-    {!me && (
-      <form onSubmit={handleLogin}>
-        <label>
-          Email
-          <input
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            type="email"
-            style={{ display: 'block', width: '100%', marginBottom: 8 }}
-          />
-        </label>
-        <label>
-          Password
-          <input
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            type="password"
-            style={{ display: 'block', width: '100%', marginBottom: 8 }}
-          />
-        </label>
-        <button type="submit">Log in</button>
-      </form>
-    )}
-      {error && <p style={{ color: 'crimson' }}>{error}</p>}
-      {me && (
-  <pre style={{ background: '#f4f4f4', padding: 12 }}>
-    {JSON.stringify(me, null, 2)}
-  </pre>
-)}
+return (
+  <main className={me ? 'app' : 'app app--login'}>
+    {!me ? (
+      <>
+        <header className="brand">
+          <div className="brand__pulse" aria-hidden="true" />
+          <h1>PULSEBOARD</h1>
+        </header>
+        <div className="rule" />
+        <p className="tagline">Real-time. Precise. Instrumented.</p>
 
-{me && (
-  <form onSubmit={handleAddService}>
-    <h2>Add service</h2>
-    <input
-      placeholder="Name"
-      value={newName}
-      onChange={(e) => setNewName(e.target.value)}
-      style={{ display: 'block', width: '100%', marginBottom: 8 }}
-    />
-    <input
-      placeholder="https://..."
-      value={newUrl}
-      onChange={(e) => setNewUrl(e.target.value)}
-      style={{ display: 'block', width: '100%', marginBottom: 8 }}
-    />
-    <button type="submit">Add</button>
-  </form>
-)}
+        <form className="panel" onSubmit={handleLogin}>
+          <div className="panel__head">LOGIN</div>
+          <div className="panel__body">
+            <label className="field">
+              <span>Email</span>
+              <input
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                type="email"
+                autoComplete="username"
+              />
+            </label>
+            <label className="field">
+              <span>Password</span>
+              <input
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                type="password"
+                autoComplete="current-password"
+              />
+            </label>
+            <button className="btn-primary" type="submit">
+              Sign in
+            </button>
+          </div>
+        </form>
 
-{me && <h2>Services</h2>}
-{services.length > 0 && (
-  <ul>
-    {services.map((s) => (
-      <li key={s.id}>
-        <button type="button" onClick={() => handleSelectService(s.id)}>
-          {s.name}
-        </button>
-        {' '}— {s.current_status}
-        {s.is_paused ? ' (paused)' : ''} — {s.url}{' '}
-        <button type="button" onClick={() => handlePause(s)}>
-          {s.is_paused ? 'Resume' : 'Pause'}
-        </button>{' '}
-        <button type="button" onClick={() => handleDelete(s.id)}>
-          Delete
-        </button>
-      </li>
-    ))}
-  </ul>
-)}
-
-{selectedId && (
-  <>
-    <h2>Recent checks</h2>
-    {checks.length === 0 ? (
-      <p>No checks yet (is the worker running?)</p>
+        {error && <p className="error">{error}</p>}
+      </>
     ) : (
-      <ul>
-        {checks.map((c) => (
-          <li key={c.id}>
-            {c.success ? 'OK' : 'FAIL'} — {c.status_code ?? '—'} —{' '}
-            {c.latency_ms ?? '—'}ms — {c.checked_at}
-            {c.error_message ? ` — ${c.error_message}` : ''}
-          </li>
-        ))}
-      </ul>
+      <>
+        <header className="topbar">
+          <div>
+            <h1>PULSEBOARD</h1>
+            <div className="topbar__meta">{me.email}</div>
+          </div>
+          <button type="button" className="btn" onClick={handleLogout}>
+            Log out
+          </button>
+        </header>
+
+        {error && <p className="error">{error}</p>}
+
+        <section className="section">
+          <div className="section__head">Add service</div>
+          <div className="section__body">
+            <form className="add-grid" onSubmit={handleAddService}>
+              <label className="field">
+                <span>Name</span>
+                <input
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="Payment API"
+                />
+              </label>
+              <label className="field">
+                <span>URL</span>
+                <input
+                  value={newUrl}
+                  onChange={(e) => setNewUrl(e.target.value)}
+                  placeholder="https://..."
+                />
+              </label>
+              <button className="btn-primary" type="submit">
+                Add
+              </button>
+            </form>
+          </div>
+        </section>
+
+        <section className="section">
+          <div className="section__head">Services</div>
+          <div className="section__body">
+            {services.length === 0 ? (
+              <p className="muted">No services yet.</p>
+            ) : (
+              <ul className="stack">
+                {services.map((s) => (
+                  <li key={s.id}>
+                    <button
+                      type="button"
+                      className="linkish"
+                      onClick={() => handleSelectService(s.id)}
+                    >
+                      {s.name}
+                    </button>
+                    <span
+                      className={`status status--${
+                        s.is_paused ? 'paused' : s.current_status || 'unknown'
+                      }`}
+                    >
+                      {s.is_paused ? 'paused' : s.current_status}
+                    </span>
+                    <span className="muted">{s.url}</span>
+                    <button type="button" className="btn" onClick={() => handlePause(s)}>
+                      {s.is_paused ? 'Resume' : 'Pause'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => handleDelete(s.id)}
+                    >
+                      Delete
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+
+        {selectedId && (
+          <section className="section">
+            <div className="section__head">Recent checks</div>
+            <div className="section__body">
+              {checks.length === 0 ? (
+                <p className="muted">No checks yet.</p>
+              ) : (
+                <ul className="stack">
+                  {checks.map((c) => (
+                    <li key={c.id}>
+                      <span className={`status status--${c.success ? 'ok' : 'fail'}`}>
+                        {c.success ? 'OK' : 'FAIL'}
+                      </span>
+                      <span className="muted">
+                        {c.status_code ?? '—'} · {c.latency_ms ?? '—'}ms · {c.checked_at}
+                      </span>
+                      {c.error_message && (
+                        <span className="muted">{c.error_message}</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </section>
+        )}
+
+        <section className="section">
+          <div className="section__head">Incidents</div>
+          <div className="section__body">
+            {incidents.length === 0 ? (
+              <p className="muted">No incidents.</p>
+            ) : (
+              <ul className="stack">
+                {incidents.map((i) => (
+                  <li key={i.id}>
+                    <strong>{i.service_name}</strong>
+                    <span className="status status--fail">{i.status}</span>
+                    <span className="muted">{i.summary}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+      </>
     )}
-  </>
-)}
-  {incidents.length > 0 && (
-  <>
-    <h2>Incidents</h2>
-    <ul>
-      {incidents.map((i) => (
-        <li key={i.id}>
-          {i.service_name} — {i.status} — {i.summary}
-        </li>
-      ))}
-    </ul>
-  </>
-)}
-    </main>
-  )
+  </main>
+)
 }
 
 export default App

@@ -14,7 +14,24 @@ function App() { //function that returns HTML like JSX, Vite mounts it on the pa
   const [incidents, setIncidents] = useState([])
   const [newName, setNewName] = useState('')
   const [newUrl, setNewUrl] = useState('')
+  const [selectedId, setSelectedId] = useState(null)
+  const [checks, setChecks] = useState([])
 
+  async function handleSelectService(serviceId) {
+  setError('')
+  setSelectedId(serviceId)
+
+  const res = await fetch(`${API}/services/${serviceId}/health-checks`, {
+    credentials: 'include',
+  })
+  const data = await res.json()
+  if (!res.ok) {
+    setError(data.error || 'Could not load health checks')
+    setChecks([])
+    return
+  }
+  setChecks(data)
+}
 
   async function loadServices(){
     const res = await fetch(`${API}/services`, {credentials: 'include'})
@@ -195,7 +212,10 @@ setIncidents(incData)
   <ul>
     {services.map((s) => (
       <li key={s.id}>
-        {s.name} — {s.current_status}
+        <button type="button" onClick={() => handleSelectService(s.id)}>
+          {s.name}
+        </button>
+        {' '}— {s.current_status}
         {s.is_paused ? ' (paused)' : ''} — {s.url}{' '}
         <button type="button" onClick={() => handlePause(s)}>
           {s.is_paused ? 'Resume' : 'Pause'}
@@ -206,6 +226,25 @@ setIncidents(incData)
       </li>
     ))}
   </ul>
+)}
+
+{selectedId && (
+  <>
+    <h2>Recent checks</h2>
+    {checks.length === 0 ? (
+      <p>No checks yet (is the worker running?)</p>
+    ) : (
+      <ul>
+        {checks.map((c) => (
+          <li key={c.id}>
+            {c.success ? 'OK' : 'FAIL'} — {c.status_code ?? '—'} —{' '}
+            {c.latency_ms ?? '—'}ms — {c.checked_at}
+            {c.error_message ? ` — ${c.error_message}` : ''}
+          </li>
+        ))}
+      </ul>
+    )}
+  </>
 )}
   {incidents.length > 0 && (
   <>

@@ -389,6 +389,12 @@ function notifyWorkspace(workspaceId){
   io.to(`workspace:${workspaceId}`).emit('workspace:updated');
 }
 
+app.post('/internal/notify', (req, res) => {
+  const { workspaceId } = req.body;
+  notifyWorkspace(workspaceId);
+  res.json({ ok: true });
+});
+
 httpServer.listen(PORT, async () => {
   console.log(`Listening on http://localhost:${PORT}`);
   try {

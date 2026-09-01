@@ -43,7 +43,7 @@ async function checkService(service){
 }
 
 async function runChecks(){
-    const result = await pool.query(`SELECT id, name, url, interval_seconds, timeout_ms, expected_status, is_paused FROM services WHERE is_paused = false`); //SELECT 1 AS ok- connectivity check
+    const result = await pool.query(`SELECT id, name, url, interval_seconds, timeout_ms, expected_status, is_paused, workspace_id FROM services WHERE is_paused = false`); //SELECT 1 AS ok- connectivity check
     // console.log('WORKER DB ok:', result.rows[0]);
 
     // await pool.end(); //Close connections so Node can exit cleanly
@@ -68,6 +68,16 @@ async function runChecks(){
 
         // Day 7: one open incident per continuous outage (create / skip / resolve)
         await syncIncident(service, check.success);
+
+        try {
+    await fetch('http://localhost:3000/internal/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspaceId: service.workspace_id  }),
+    });
+} catch (err) {
+    console.error('notify failed:', err.message);
+}
     }
 }
 

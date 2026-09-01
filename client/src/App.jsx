@@ -190,9 +190,12 @@ useEffect(() => {
   const s = io(API, { withCredentials: true })
   s.emit('join-workspace', me.workspaceId)
   s.on('workspace:updated', () => {
-    loadServices()
-    loadIncidents()
-  })
+  loadServices()
+  loadIncidents()
+  if (selectedId) {
+    handleSelectService(selectedId)
+  }
+})
   setSocket(s)
 
   return () => {

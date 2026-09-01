@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import './App.css'
 
 const API = 'http://localhost:3000'
@@ -42,6 +42,16 @@ function App() { //function that returns HTML like JSX, Vite mounts it on the pa
     }
     setServices(data)
   }
+
+  async function loadIncidents() {
+  const res = await fetch(`${API}/incidents`, { credentials: 'include' })
+  const data = await res.json()
+  if (!res.ok) {
+    setError(data.error || 'Could not load incidents')
+    return
+  }
+  setIncidents(data)
+}
 
   async function handleAddService(e) {
   e.preventDefault()
@@ -151,6 +161,20 @@ setIncidents(incData)
   setServices([])
   setIncidents([])
 }
+
+useEffect(() => {
+  if (!me) return
+
+  const id = setInterval(() => {
+    loadServices()
+    loadIncidents()
+    if (selectedId) {
+      handleSelectService(selectedId)
+    }
+  }, 30_000)
+
+  return () => clearInterval(id)
+}, [me, selectedId])
 
   return (
     <main style={{ maxWidth: 420, margin: '2rem auto', fontFamily: 'system-ui' }}>

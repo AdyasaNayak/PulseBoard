@@ -53,6 +53,11 @@ function App() { //function that returns HTML like JSX, Vite mounts it on the pa
   setIncidents(data)
 }
 
+  async function loadDashboard() {
+    await loadServices()
+    await loadIncidents()
+  }
+
   async function handleAddService(e) {
   e.preventDefault()
   setError('')
@@ -163,6 +168,19 @@ setIncidents(incData)
   setSelectedId(null)
   setChecks([])
 }
+
+useEffect(() => {
+  async function restoreSession() {
+    const res = await fetch(`${API}/auth/me`, {
+      credentials: 'include',
+    })
+    if (!res.ok) return
+    const meData = await res.json()
+    setMe(meData)
+    await loadDashboard()
+  }
+  restoreSession()
+}, [])
 
 useEffect(() => {
   if (!me) return

@@ -5,6 +5,9 @@ import bcrypt from 'bcrypt';
 import {pool} from './db.js';
 import express from 'express';
 
+import {createServer} from 'http';
+import {Server} from 'socket.io';
+
 const app = express();
 app.use(express.json());
 
@@ -178,6 +181,7 @@ app.post('/services', requireAuth, async(req, res) => {
         workspaceId, name, url, intervalSeconds ?? 30, timeoutMs ?? 5000, expectedStatus ?? 200,
       ]
     );  
+    notifyWorkspace(workspaceId);
     res.status(201).json(result.rows[0]);
   }
   catch(err){
@@ -217,6 +221,7 @@ app.patch('/services/:id', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'Service not found' });
     }
 
+    notifyWorkspace(req.session.workspaceId);
     res.json(result.rows[0]);
   } catch (err) {
     console.error(err);
@@ -237,6 +242,7 @@ app.delete('/services/:id', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'Service not found' });
     }
 
+    notifyWorkspace(req.session.workspaceId);
     res.json(result.rows[0]);
   } catch (err) {
     console.error(err);
@@ -344,8 +350,9 @@ app.get('/auth/me', (req, res) => {
   }
 
   res.json({
-    id: req.session.userId,
-    email: req.session.email,
+  id: req.session.userId,
+  email: req.session.email,
+  workspaceId: req.session.workspaceId,
   });
 });
 
@@ -360,7 +367,29 @@ app.post('/auth/logout', (req, res) => {
   });
 });
 
-app.listen(PORT, async () => {
+const httpServer = createServer(app);
+
+const io = new Server(httpServer, {
+  cors: {
+    origin: 'http://localhost:5173',
+    credentials: true,
+  },
+});
+
+io.on('connection', (socket) => {
+  socket.on('join-workspace', (workspaceId) => {
+    if(workspaceId) {
+      socket.join(`workspace:${workspaceId}`);
+    }
+  });
+});
+
+function notifyWorkspace(workspaceId){
+  if(!workspaceId) return;
+  io.to(`workspace:${workspaceId}`).emit('workspace:updated');
+}
+
+httpServer.listen(PORT, async () => {
   console.log(`Listening on http://localhost:${PORT}`);
   try {
     await pool.query('SELECT 1');

@@ -1,3 +1,4 @@
+import {io} from 'socket.io-client'
 import { useState, useEffect } from 'react'
 import './App.css'
 
@@ -16,6 +17,7 @@ function App() { //function that returns HTML like JSX, Vite mounts it on the pa
   const [newUrl, setNewUrl] = useState('')
   const [selectedId, setSelectedId] = useState(null)
   const [checks, setChecks] = useState([])
+  const [socket, setSocket] = useState(null)
 
   async function handleSelectService(serviceId) {
   setError('')
@@ -181,6 +183,23 @@ useEffect(() => {
   }
   restoreSession()
 }, [])
+
+useEffect(() => {
+  if (!me?.workspaceId) return
+
+  const s = io(API, { withCredentials: true })
+  s.emit('join-workspace', me.workspaceId)
+  s.on('workspace:updated', () => {
+    loadServices()
+    loadIncidents()
+  })
+  setSocket(s)
+
+  return () => {
+    s.disconnect()
+    setSocket(null)
+  }
+}, [me?.workspaceId])
 
 useEffect(() => {
   if (!me) return

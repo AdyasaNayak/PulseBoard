@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import cors from 'cors';
 import session from 'express-session';
 import bcrypt from 'bcrypt';
@@ -39,6 +40,12 @@ function requireAuth(req, res, next) {
   }
   next();
 }
+
+const authBodySchema = z.object({
+  email: z.string().trim().email('Invalid email'),
+
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+});
 
 app.get('/', (req, res) => {
   res.send('PulseBoard API is starting to exist');
@@ -252,11 +259,13 @@ app.delete('/services/:id', requireAuth, async (req, res) => {
 
 app.post('/auth/register', async(req, res) => {
   try{
-    const {email, password} = req.body;
-
-    if(!email || !password){
-      return res.status(400).json({error: 'email and password are required'});
+    const parsed = authBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: parsed.error.issues[0]?.message || 'Invalid input',
+      });
     }
+    const { email, password } = parsed.data;
 
     const passwordHash = await bcrypt.hash(password, 10);
 
@@ -268,16 +277,16 @@ app.post('/auth/register', async(req, res) => {
     );
 
     const user = result.rows[0];
-const workspaceResult = await pool.query(
-  `INSERT INTO workspaces (owner_id, name)
-   VALUES ($1, $2)
-   RETURNING id, name`,
-  [user.id, 'My Workspace']
-);
-res.status(201).json({
-  user,
-  workspace: workspaceResult.rows[0],
-});
+    const workspaceResult = await pool.query(
+    `INSERT INTO workspaces (owner_id, name)
+    VALUES ($1, $2)
+    RETURNING id, name`,
+    [user.id, 'My Workspace']
+    );
+    res.status(201).json({
+      user,
+      workspace: workspaceResult.rows[0],
+    });
   }
   catch(err){
     console.error(err);
@@ -290,11 +299,13 @@ res.status(201).json({
 
 app.post('/auth/login', async(req, res) => {
   try{
-    const {email, password} = req.body;
-
-    if(!email || !password){
-      return res.status(400).json({error: 'email and password are required'});
+    const parsed = authBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: parsed.error.issues[0]?.message || 'Invalid       input',
+      });
     }
+    const { email, password } = parsed.data;
 
     const result = await pool.query(
       `SELECT id, email, password_hash FROM users WHERE email = $1`,

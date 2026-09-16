@@ -70,7 +70,7 @@ async function runChecks(){
         await syncIncident(service, check.success);
 
         try {
-    await fetch('http://localhost:3000/internal/notify', {
+    await fetch(`${process.env.API_URL}/internal/notify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ workspaceId: service.workspace_id  }),

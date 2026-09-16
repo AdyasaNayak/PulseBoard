@@ -10,7 +10,10 @@ import {createServer} from 'http';
 import {Server} from 'socket.io';
 
 const app = express();
+app.set('trust proxy', 1);
 app.use(express.json());
+
+const isProd = process.env.NODE_ENV === 'production';
 
 app.use(
   session({
@@ -18,8 +21,9 @@ app.use(
     resave: false,
     saveUninitialized: false,
     cookie: {
-      httpOnly: true,
-      sameSite: 'lax', //cookie policy that still works for localhost API calls
+      httpOnly: true, 
+      sameSite: isProd ? 'none' : 'lax', 
+      secure: isProd, 
       maxAge: 1000 * 60 * 60 * 24 * 7,
     },
   })
@@ -27,12 +31,12 @@ app.use(
 
 app.use(
   cors({
-    origin: 'http://localhost:5173', //only the vite app may call the API from a browser
+    origin: process.env.CLIENT_ORIGIN, //only the vite app may call the API from a browser
     credentials: true, //allows cookies on cross origin requests
   })
 );
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 function requireAuth(req, res, next) {
   if (!req.session.userId) {
@@ -382,7 +386,7 @@ const httpServer = createServer(app);
 
 const io = new Server(httpServer, {
   cors: {
-    origin: 'http://localhost:5173',
+    origin: process.env.CLIENT_ORIGIN,
     credentials: true,
   },
 });

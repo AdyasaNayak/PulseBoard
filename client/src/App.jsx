@@ -2,7 +2,7 @@ import { io } from 'socket.io-client'
 import { useState, useEffect } from 'react'
 import './App.css'
 
-const API = 'http://localhost:3000'
+const API = import.meta.env.VITE_API_URL
 
 function App() {
   // pattern: [currentValue, setterFunction] = useState(startingValue)

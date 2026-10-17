@@ -114,9 +114,21 @@ async function syncIncident(service, checkSucceeded) {
     }
 }
 
-await runChecks();
+let checking = false;
 
-setInterval(() => {
-    runChecks().catch((err) => console.error(err));
-}, 30_000);
+async function tick() {
+    if (checking) return; //a previous run is still in flight - skip this tick instead of overlapping
+    checking = true;
+    try {
+        await runChecks();
+    } catch (err) {
+        console.error('runChecks failed:', err.message);
+    } finally {
+        checking = false;
+    }
+}
+
+await tick();
+
+setInterval(tick, 30_000);
 

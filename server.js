@@ -1,7 +1,9 @@
+import 'dotenv/config';
 import { z } from 'zod';
 import cors from 'cors';
 import session from 'express-session';
 import bcrypt from 'bcrypt';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 
 import {pool} from './db.js';
 import express from 'express';
@@ -9,14 +11,25 @@ import express from 'express';
 import {createServer} from 'http';
 import {Server} from 'socket.io';
 
+for (const key of ['DATABASE_URL', 'SESSION_SECRET', 'CLIENT_ORIGIN']) {
+  if (!process.env[key]) {
+    console.error(`Missing required environment variable: ${key}`);
+    process.exit(1);
+  }
+}
+
 const app = express();
 app.set('trust proxy', 1);
 app.use(express.json());
 
 const isProd = process.env.NODE_ENV === 'production';
 
+//shared store so the socket.io layer can authenticate connections by session id
+const sessionStore = new session.MemoryStore();
+
 app.use(
   session({
+    store: sessionStore,
     secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
@@ -51,6 +64,34 @@ const authBodySchema = z.object({
   password: z.string().min(8, 'Password must be at least 8 characters'),
 });
 
+const httpUrl = z.httpUrl('URL must be http or https');
+
+const serviceCreateSchema = z.object({
+  name: z.string().trim().min(1, 'name is required').max(200, 'name is too long'),
+  url: httpUrl,
+  intervalSeconds: z.coerce.number().int().min(5, 'intervalSeconds must be at least 5').max(86400).optional(),
+  timeoutMs: z.coerce.number().int().min(100, 'timeoutMs must be at least 100').max(60000).optional(),
+  expectedStatus: z.coerce.number().int().min(100).max(599).optional(),
+});
+
+const serviceUpdateSchema = z.object({
+  name: z.string().trim().min(1, 'name cannot be empty').max(200, 'name is too long').optional(),
+  url: httpUrl.optional(),
+  intervalSeconds: z.coerce.number().int().min(5, 'intervalSeconds must be at least 5').max(86400).optional(),
+  timeoutMs: z.coerce.number().int().min(100, 'timeoutMs must be at least 100').max(60000).optional(),
+  expectedStatus: z.coerce.number().int().min(100).max(599).optional(),
+  isPaused: z.boolean().optional(),
+});
+
+function parseServiceId(req) {
+  const id = Number(req.params.id);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+function firstIssue(parsed) {
+  return parsed.error.issues[0]?.message || 'Invalid input';
+}
+
 app.get('/', (req, res) => {
   res.send('PulseBoard API is starting to exist');
 });
@@ -73,9 +114,10 @@ app.get('/services', requireAuth, async(req, res) => {
 
 app.get('/services/:id/health-checks', requireAuth, async(req, res) => {
   try{
-    //next: verify service belongs to workspace, then SELECT health_checks
-    // res.status(501).json({message: 'health-checks not implemented yet'}); replace with
-    const serviceId = req.params.id;
+    const serviceId = parseServiceId(req);
+    if (serviceId === null) {
+      return res.status(404).json({error: 'Service not found'});
+    }
     const workspaceId = req.session.workspaceId;
 
     const owned = await pool.query(
@@ -101,7 +143,10 @@ app.get('/services/:id/health-checks', requireAuth, async(req, res) => {
 //incidents for one service if you own it
 app.get('/services/:id/incidents', requireAuth, async (req, res) => {
   try {
-    const serviceId = req.params.id;
+    const serviceId = parseServiceId(req);
+    if (serviceId === null) {
+      return res.status(404).json({ error: 'Service not found' });
+    }
     const workspaceId = req.session.workspaceId;
 
     const owned = await pool.query(
@@ -159,10 +204,14 @@ app.get('/incidents', requireAuth, async (req, res) => {
 
 app.get('/services/:id', requireAuth, async (req, res) => {
   try {
+    const serviceId = parseServiceId(req);
+    if (serviceId === null) {
+      return res.status(404).json({ error: 'Service not found' });
+    }
     const result = await pool.query(
       `SELECT * FROM services
        WHERE id = $1 AND workspace_id = $2`,
-      [req.params.id, req.session.workspaceId]
+      [serviceId, req.session.workspaceId]
     );
 
     if (result.rows.length === 0) {
@@ -178,11 +227,11 @@ app.get('/services/:id', requireAuth, async (req, res) => {
 
 app.post('/services', requireAuth, async(req, res) => {
   try{
-    const{name, url, intervalSeconds, timeoutMs, expectedStatus} = req.body;
-
-    if(!name || !url){
-      return res.status(400).json({error:'name and url are required'});
+    const parsed = serviceCreateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({error: firstIssue(parsed)});
     }
+    const {name, url, intervalSeconds, timeoutMs, expectedStatus} = parsed.data;
     const workspaceId = req.session.workspaceId;
 
     const result = await pool.query(
@@ -203,8 +252,16 @@ app.post('/services', requireAuth, async(req, res) => {
 
 app.patch('/services/:id', requireAuth, async (req, res) => {
   try {
+    const serviceId = parseServiceId(req);
+    if (serviceId === null) {
+      return res.status(404).json({ error: 'Service not found' });
+    }
+    const parsed = serviceUpdateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({error: firstIssue(parsed)});
+    }
     const { name, url, intervalSeconds, timeoutMs, expectedStatus, isPaused } =
-      req.body;
+      parsed.data;
 
     const result = await pool.query(
       `UPDATE services SET
@@ -223,7 +280,7 @@ app.patch('/services/:id', requireAuth, async (req, res) => {
         timeoutMs ?? null,
         expectedStatus ?? null,
         isPaused ?? null,
-        req.params.id,
+        serviceId,
         req.session.workspaceId,
       ]
     );
@@ -242,11 +299,15 @@ app.patch('/services/:id', requireAuth, async (req, res) => {
 
 app.delete('/services/:id', requireAuth, async (req, res) => {
   try {
+    const serviceId = parseServiceId(req);
+    if (serviceId === null) {
+      return res.status(404).json({ error: 'Service not found' });
+    }
     const result = await pool.query(
       `DELETE FROM services
        WHERE id = $1 AND workspace_id = $2
        RETURNING *`,
-      [req.params.id, req.session.workspaceId]
+      [serviceId, req.session.workspaceId]
     );
 
     if (result.rows.length === 0) {
@@ -265,9 +326,7 @@ app.post('/auth/register', async(req, res) => {
   try{
     const parsed = authBodySchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({
-        error: parsed.error.issues[0]?.message || 'Invalid input',
-      });
+      return res.status(400).json({ error: firstIssue(parsed) });
     }
     const { email, password } = parsed.data;
 
@@ -305,9 +364,7 @@ app.post('/auth/login', async(req, res) => {
   try{
     const parsed = authBodySchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({
-        error: parsed.error.issues[0]?.message || 'Invalid       input',
-      });
+      return res.status(400).json({ error: firstIssue(parsed) });
     }
     const { email, password } = parsed.data;
 
@@ -391,10 +448,60 @@ const io = new Server(httpServer, {
   },
 });
 
+//cookie-signature compatible unsigning (same algorithm express-session uses to sign connect.sid)
+function unsignSessionId(signed, secret) {
+  const dotIndex = signed.lastIndexOf('.');
+  if (dotIndex === -1) return null;
+  const value = signed.slice(0, dotIndex);
+  const mac = signed.slice(dotIndex + 1);
+  const expected = createHmac('sha256', secret)
+    .update(value)
+    .digest('base64')
+    .replace(/=+$/, '');
+  const received = mac.replace(/=+$/, '');
+  const a = Buffer.from(received);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b) ? value : null;
+}
+
+function parseSessionCookie(cookieHeader) {
+  if (!cookieHeader) return null;
+  for (const part of cookieHeader.split(';')) {
+    const eq = part.indexOf('=');
+    if (eq === -1) continue;
+    if (part.slice(0, eq).trim() !== 'connect.sid') continue;
+    const value = decodeURIComponent(part.slice(eq + 1).trim());
+    //express-session signs the sid and prefixes it with 's:' before storing the cookie
+    return value.startsWith('s:') ? value.slice(2) : value;
+  }
+  return null;
+}
+
+io.use((socket, next) => {
+  //only allow sockets backed by a valid, logged-in session
+  const signed = parseSessionCookie(socket.request.headers.cookie);
+  const sid = signed ? unsignSessionId(signed, process.env.SESSION_SECRET) : null;
+  if (!sid) {
+    return next(new Error('unauthorized'));
+  }
+  sessionStore.get(sid, (err, sess) => {
+    if (err || !sess || !sess.userId) {
+      return next(new Error('unauthorized'));
+    }
+    socket.data.userId = sess.userId;
+    socket.data.workspaceId = sess.workspaceId;
+    next();
+  });
+});
+
 io.on('connection', (socket) => {
   socket.on('join-workspace', (workspaceId) => {
-    if(workspaceId) {
-      socket.join(`workspace:${workspaceId}`);
+    //a socket may only listen to the workspace of its own session
+    if (
+      socket.data.workspaceId != null &&
+      String(workspaceId) === String(socket.data.workspaceId)
+    ) {
+      socket.join(`workspace:${socket.data.workspaceId}`);
     }
   });
 });
@@ -405,6 +512,11 @@ function notifyWorkspace(workspaceId){
 }
 
 app.post('/internal/notify', (req, res) => {
+  //loopback-only: this endpoint exists so the worker process on the same host can push updates
+  const remote = req.socket.remoteAddress || '';
+  if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(remote)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   const { workspaceId } = req.body;
   notifyWorkspace(workspaceId);
   res.json({ ok: true });

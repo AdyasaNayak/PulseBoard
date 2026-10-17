@@ -1,5 +1,5 @@
 import { io } from 'socket.io-client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import './App.css'
 
 const API = import.meta.env.VITE_API_URL
@@ -14,12 +14,17 @@ function App() {
   const [newUrl, setNewUrl] = useState('')
   const [selectedId, setSelectedId] = useState(null)
   const [checks, setChecks] = useState([])
-  const [socket, setSocket] = useState(null)
   const [authMode, setAuthMode] = useState('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
 
-  async function handleSelectService(serviceId) {
+  //ref keeps the latest selected id so live-update handlers never read a stale value
+  const selectedIdRef = useRef(null)
+  useEffect(() => {
+    selectedIdRef.current = selectedId
+  }, [selectedId])
+
+  const handleSelectService = useCallback(async (serviceId) => {
     setError('')
     setSelectedId(serviceId)
 
@@ -33,9 +38,9 @@ function App() {
       return
     }
     setChecks(data)
-  }
+  }, [])
 
-  async function loadServices() {
+  const loadServices = useCallback(async () => {
     const res = await fetch(`${API}/services`, { credentials: 'include' })
     const data = await res.json()
     if (!res.ok) {
@@ -43,9 +48,9 @@ function App() {
       return
     }
     setServices(data)
-  }
+  }, [])
 
-  async function loadIncidents() {
+  const loadIncidents = useCallback(async () => {
     const res = await fetch(`${API}/incidents`, { credentials: 'include' })
     const data = await res.json()
     if (!res.ok) {
@@ -53,12 +58,12 @@ function App() {
       return
     }
     setIncidents(data)
-  }
+  }, [])
 
-  async function loadDashboard() {
+  const loadDashboard = useCallback(async () => {
     await loadServices()
     await loadIncidents()
-  }
+  }, [loadServices, loadIncidents])
 
   async function handleAddService(e) {
     e.preventDefault()
@@ -202,7 +207,7 @@ function App() {
       await loadDashboard()
     }
     restoreSession()
-  }, [])
+  }, [loadDashboard])
 
   useEffect(() => {
     if (!me?.workspaceId) return
@@ -210,33 +215,29 @@ function App() {
     const s = io(API, { withCredentials: true })
     s.emit('join-workspace', me.workspaceId)
     s.on('workspace:updated', () => {
-      loadServices()
-      loadIncidents()
-      if (selectedId) {
-        handleSelectService(selectedId)
+      loadDashboard()
+      if (selectedIdRef.current) {
+        handleSelectService(selectedIdRef.current)
       }
     })
-    setSocket(s)
 
     return () => {
       s.disconnect()
-      setSocket(null)
     }
-  }, [me?.workspaceId])
+  }, [me?.workspaceId, loadDashboard, handleSelectService])
 
   useEffect(() => {
     if (!me) return
 
     const id = setInterval(() => {
-      loadServices()
-      loadIncidents()
-      if (selectedId) {
-        handleSelectService(selectedId)
+      loadDashboard()
+      if (selectedIdRef.current) {
+        handleSelectService(selectedIdRef.current)
       }
     }, 30_000)
 
     return () => clearInterval(id)
-  }, [me, selectedId])
+  }, [me, loadDashboard, handleSelectService])
 
   return (
     <main className={me ? 'app' : 'app app--login'}>
